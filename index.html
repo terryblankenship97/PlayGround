@@ -1,120 +1,701 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><meta name="theme-color" content="#101a20">
-<title>Runesprint — Runecrafting Run</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Runesprint — Essence Eternal</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M8 1 12 8 8 15 4 8Z' fill='%238fe3ff'/></svg>">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
-:root{color-scheme:dark;font-family:Manrope,system-ui,sans-serif;background:#101a20;color:#f4ead5}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{background:#101a20}canvas{display:block;width:100vw;height:100vh;touch-action:none}#hint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);color:#e4d7bf99;font:11px 'DM Mono',monospace;letter-spacing:.08em;pointer-events:none;text-align:center;white-space:nowrap}#touch{position:fixed;bottom:22px;right:20px;display:none;gap:10px}#touch button{width:62px;height:62px;border:1px solid #e6d3aa55;border-radius:18px;background:#17242bd9;color:#f3e7d0;font-size:23px;box-shadow:0 6px 20px #0005;touch-action:none}#touch button:active{background:#b88145;color:#fff}@media(max-width:700px){#touch{display:flex}#hint{bottom:94px;font-size:9px} }
+  html,body{margin:0;padding:0;height:100%;background:#08050f;overflow:hidden}
+  canvas{display:block;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Runesprint game"></canvas>
-<div id="hint">SPACE / ↑ JUMP &nbsp;·&nbsp; ↓ SLIDE &nbsp;·&nbsp; P PAUSE</div>
-<div id="touch"><button id="jump" aria-label="Jump">↑</button><button id="slide" aria-label="Slide">↓</button></div>
+<canvas id="c"></canvas>
 <script>
 'use strict';
-const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
-const W=1200,H=700,ground=535;
-let dpr=1,scale=1,ox=0,oy=0,portrait=false;
-function resize(){dpr=Math.min(devicePixelRatio||1,2);canvas.width=innerWidth*dpr;canvas.height=innerHeight*dpr;portrait=innerHeight>innerWidth;if(portrait){scale=canvas.height/H;ox=canvas.width/2-250*scale;oy=0}else{scale=Math.min(canvas.width/W,canvas.height/H);ox=(canvas.width-W*scale)/2;oy=(canvas.height-H*scale)/2}}
-addEventListener('resize',resize);resize();
-const runes=[['Air',1,5],['Mind',2,5.5],['Water',5,6],['Earth',9,6.5],['Fire',14,7],['Body',20,7.5],['Cosmic',27,8],['Chaos',35,8.5],['Nature',44,9],['Law',54,9.5],['Death',65,10],['Blood',77,10.5]];
-const xpForLevel=l=>l<2?0:Math.floor(Array.from({length:l-1},(_,i)=>Math.floor((i+1)+300*Math.pow(2,(i+1)/7))).reduce((a,b)=>a+b,0)/4);
-const levelForXp=x=>{let l=1;while(l<99&&xpForLevel(l+1)<=x)l++;return l};
-let mode='title',last=0,elapsed=0,dist=0,speed=310,essence=0,runesMade=0,xp=0,level=1,best=+(localStorage.getItem('runesprintBest')||0),craftCount=0;
-let player={y:ground,vy:0,jump:false,slide:0,run:0,invuln:0};
-let objects=[],particles=[],floaters=[],shake=0,altarFlash=0,craftText='',craftTextTime=0,spawnTimer=1.0,altarTimer=0,worldSeed=0;
-const rand=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-function reset(){mode='running';dist=0;speed=310;essence=0;runesMade=0;xp=0;level=1;craftCount=0;elapsed=0;objects=[];particles=[];floaters=[];player={y:ground,vy:0,jump:false,slide:0,run:0,invuln:0};spawnTimer=.8;altarTimer=1050;craftText='';}
-function start(){reset()}
-function pause(){if(mode==='running')mode='paused';else if(mode==='paused')mode='running'}
-function jump(){if(mode==='title'||mode==='over'){start();return}if(mode!=='running')return;if(!player.jump&&player.y>=ground-1){player.vy=-735;player.jump=true;burst(250,ground-25,'#d7c58c',7)}}
-function slide(){if(mode==='title'||mode==='over'){start();return}if(mode==='running')player.slide=.62}
-function actionAt(x,y){x=(x-ox)/scale;y=(y-oy)/scale;if(mode==='title'){start();return}if(mode==='over'){if(y>435&&y<540){start();return}if(y>540){mode='title';return}}if(mode==='paused'){mode='running';return}if(x>1125&&y<70)pause()}
-canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture?.(e.pointerId);actionAt(e.offsetX*dpr,e.offsetY*dpr)});
-addEventListener('keydown',e=>{if(['Space','ArrowUp','KeyW'].includes(e.code)){e.preventDefault();jump()}else if(['ArrowDown','KeyS'].includes(e.code)){e.preventDefault();slide()}else if(e.code==='KeyP'||e.code==='Escape')pause()});
-document.getElementById('jump').addEventListener('pointerdown',e=>{e.preventDefault();jump()});document.getElementById('slide').addEventListener('pointerdown',e=>{e.preventDefault();slide()});
-function addObject(type,x){objects.push({type,x,y:type==='essence'?rand(ground-120,ground-58):ground,phase:rand(0,7),r:rand(0,1)})}
-function burst(x,y,color,n=10){for(let i=0;i<n;i++)particles.push({x,y,vx:rand(-125,125),vy:rand(-180,40),life:rand(.35,.8),max:.8,color,size:rand(2,5)})}
-function floatText(text,x,y,color='#ead49d'){floaters.push({text,x,y,life:1.4,color})}
-function craft(){if(essence<=0)return;const rune=runes.filter(r=>r[1]<=level).at(-1);let amount=essence;essence=0;runesMade+=amount;craftCount++;const gain=Math.round(amount*rune[2]);let before=level;xp+=gain;level=levelForXp(xp);altarFlash=1;craftText=`+${amount} ${rune[0].toUpperCase()} RUNES  ·  +${gain} XP`;craftTextTime=2.8;floatText(`+${amount} ${rune[0]} runes`,735,282,'#f1cb79');burst(735,360,'#a8def0',28);if(level>before){floatText(`RUNEC​​RAFTING LEVEL ${level}!`,600,220,'#ffdb85');}
+/* ============================================================
+   RUNESPRINT — an endless runecrafting dash
+   single-file canvas game · fixed timestep · letterboxed 960x540
+   ============================================================ */
+const cvs = document.getElementById('c'), ctx = cvs.getContext('2d');
+const W = 960, H = 540, GROUND = 440, PX = 182;   // PX = player screen x
+const GRAV = 2000, JUMP_V = -720, MAX_FALL = 1200;
+
+const view = { dpr:1, s:1, ox:0, oy:0, cw:0, ch:0 };
+function resize(){
+  view.dpr = Math.min(window.devicePixelRatio||1, 2);
+  view.cw = window.innerWidth; view.ch = window.innerHeight;
+  cvs.width = Math.round(view.cw*view.dpr); cvs.height = Math.round(view.ch*view.dpr);
+  cvs.style.width = view.cw+'px'; cvs.style.height = view.ch+'px';
+  view.s = Math.min(view.cw/W, view.ch/H);
+  view.ox = (view.cw - W*view.s)/2; view.oy = (view.ch - H*view.s)/2;
 }
-function crash(){if(player.invuln>0)return;mode='over';shake=11;burst(245,ground-30,'#dc9c65',25);best=Math.max(best,Math.floor(dist));localStorage.setItem('runesprintBest',best)}
-function update(dt){if(mode!=='running')return;elapsed+=dt;dist+=speed*dt/10;speed=Math.min(490,310+dist*.035);player.run+=dt*13;player.slide=Math.max(0,player.slide-dt);player.invuln=Math.max(0,player.invuln-dt);
-player.vy+=1900*dt;player.y+=player.vy*dt;if(player.y>=ground){player.y=ground;player.vy=0;player.jump=false}
-spawnTimer-=dt;if(spawnTimer<=0){let r=Math.random();if(r<.48)addObject('essence',W+50);else if(r<.76)addObject('rock',W+55);else if(r<.89)addObject('wisp',W+45);else addObject('essence',W+55);spawnTimer=rand(.72,1.42)*Math.max(.66,360/speed)}
-altarTimer-=speed*dt;if(altarTimer<=0){addObject('altar',W+70);altarTimer=rand(920,1240)}
-for(const o of objects){o.x-=speed*dt;o.phase+=dt*2.7;if(o.type==='essence'){let dx=o.x-250,dy=(player.y-28)-(o.y+Math.sin(o.phase)*6);if(Math.abs(dx)<38&&Math.abs(dy)<48){o.got=true;essence++;burst(o.x,o.y,'#a9d8e5',8);floatText('+1 essence',o.x,o.y-18,'#bde7f2')}}else if(o.type==='rock'||o.type==='wisp'){let px=250,py=player.y-28;let danger=o.type==='rock'?Math.abs(o.x-px)<33&&player.y>ground-35:Math.abs(o.x-px)<32&&player.slide<=0;if(danger&&!o.hit){o.hit=true;crash()}}else if(o.type==='altar'&&o.x<256&&!o.done){o.done=true;craft()}}
-objects=objects.filter(o=>o.x>-120&&!o.got);for(const p of particles){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=280*dt;p.life-=dt}particles=particles.filter(p=>p.life>0);for(const f of floaters){f.y-=30*dt;f.life-=dt}floaters=floaters.filter(f=>f.life>0);craftTextTime=Math.max(0,craftTextTime-dt);altarFlash=Math.max(0,altarFlash-dt*1.1);shake=Math.max(0,shake-dt*25)}
-function frame(t){let dt=Math.min(.034,(t-last)/1000||0);last=t;update(dt);draw();requestAnimationFrame(frame)}
+window.addEventListener('resize', resize); resize();
+
+/* ---------------- rune table (level unlocks) ---------------- */
+const RUNES = [
+  ['Air',    '#8fe3ff',  1, 'Ai'], ['Mind',  '#ff9d9d',  2, 'Mn'],
+  ['Water',  '#7fb2ff',  5, 'Wa'], ['Earth', '#c9b37e',  9, 'Ea'],
+  ['Fire',   '#ff9a3d', 14, 'Fi'], ['Body',  '#d68cff', 20, 'Bo'],
+  ['Cosmic', '#ffe97d', 27, 'Co'], ['Chaos', '#ff6b6b', 35, 'Ch'],
+  ['Nature', '#7dff9b', 44, 'Na'], ['Law',   '#e8e8ff', 54, 'La'],
+  ['Death',  '#a08bff', 65, 'De'], ['Blood', '#ff3d5e', 77, 'Bl']
+];
+function runeAt(l){ let r = RUNES[0]; for(const q of RUNES) if(l >= q[2]) r = q; return r; }
+function xpNeed(l){ return 30 + l*20; }
+
+/* ---------------- state ---------------- */
+let mode='title', t=0, dist=0, speed=330, lastMile=0;
+let player = { y:GROUND, vy:0, jump:false, slide:0, run:0, coyote:0, falling:false };
+let essence=0, runes=0, xp=0, xpTotal=0, level=1, combo=0, essenceGot=0;
+let objects=[], parts=[], floats=[], nextSpawn=0;
+let banner=null, deathInfo=null, deathT=0, dw=null, shake=0, jumpHeld=false;
+let best = +(localStorage.getItem('runesprint.best')||0);
+
+function reset(){
+  dist=0; speed=330; lastMile=0; t=0;
+  player = { y:GROUND, vy:0, jump:false, slide:0, run:0, coyote:0, falling:false };
+  essence=0; runes=0; xp=0; xpTotal=0; level=1; combo=0; essenceGot=0;
+  objects=[]; parts=[]; floats=[]; nextSpawn=520;
+  banner=null; deathInfo=null; deathT=0; dw=null; shake=0;
+  spawn();
+}
+function start(){ reset(); mode='play'; }
+function die(reason){
+  if(mode!=='play') return;
+  const d = Math.floor(dist), nb = d > best;
+  if(nb){ best = d; localStorage.setItem('runesprint.best', best); }
+  deathInfo = { reason, dist:d, essenceGot, runes, xp:Math.floor(xpTotal), level, newBest:nb };
+  deathT = 0; shake = 14;
+  dw = (reason==='fall') ? null : { x:PX, y:player.y, vx:-160, vy:-430, rot:0 };
+  mode='dead';
+  sfxDeath();
+}
+
+/* ---------------- spawner ---------------- */
+function overGapAt(wx){
+  for(const o of objects) if(o.t==='gap' && wx > o.x && wx < o.x+o.gw) return true;
+  return false;
+}
+function spawn(){
+  while(nextSpawn < dist + 1600){
+    const x = nextSpawn, r = Math.random();
+    if(r < 0.30){                                        // essence arc
+      const n = 4 + (Math.random()*3|0);
+      for(let i=0;i<n;i++)
+        objects.push({ t:'ess', x:x+i*46, y:GROUND-60-Math.sin(i/(n-1)*Math.PI)*130 });
+      nextSpawn += n*46 + 200 + Math.random()*160;
+    } else if(r < 0.52){                                 // chasm + essence over it
+      const gw = 110 + Math.random()*90;
+      objects.push({ t:'gap', x, gw });
+      for(let i=0;i<3;i++) objects.push({ t:'ess', x:x+gw*(0.25+0.25*i), y:GROUND-115-i*18 });
+      nextSpawn += gw + 270 + Math.random()*170;
+    } else if(r < 0.74){                                 // low arch (slide!)
+      objects.push({ t:'arch', x });
+      if(Math.random() < 0.6)
+        for(let i=0;i<3;i++) objects.push({ t:'ess', x:x-70+i*60, y:GROUND-32 });
+      nextSpawn += 310 + Math.random()*200;
+    } else {                                             // altar + lead-in essence
+      objects.push({ t:'altar', x, done:false });
+      for(let i=0;i<4;i++) objects.push({ t:'ess', x:x-260+i*55, y:GROUND-70 });
+      nextSpawn += 430 + Math.random()*240;
+    }
+  }
+  objects = objects.filter(o => o.x > dist - 300);
+}
+
+/* ---------------- particles / floaters ---------------- */
+function puff(x,y,n,col,sp){
+  for(let i=0;i<n;i++){
+    const a = Math.random()*Math.PI*2, v = (0.4+Math.random()*0.6)*sp;
+    parts.push({ x, y, vx:Math.cos(a)*v, vy:Math.sin(a)*v - sp*0.4, life:0.5+Math.random()*0.4, max:0.9, col, r:2+Math.random()*3 });
+  }
+}
+function floatTxt(x,y,txt,col,big){ floats.push({ x, y, txt, col, big:!!big, life:1.1 }); }
+
+/* ---------------- actions ---------------- */
+function doJump(){
+  if(mode!=='play' || player.falling) return;
+  if(player.y >= GROUND-1 || player.coyote > 0){
+    player.vy = JUMP_V; player.jump = true; player.slide = 0; player.coyote = 0;
+    puff(PX, GROUND, 6, '#9a86ff', 60); sfxJump();
+  }
+}
+function doSlide(){
+  if(mode!=='play') return;
+  if(player.y < GROUND-1){ player.vy = Math.max(player.vy, 820); return; }  // fast-fall
+  if(player.slide <= 0){ player.slide = 0.55; puff(PX, GROUND, 5, '#7d6bd6', 50); }
+}
+
+/* ---------------- update ---------------- */
+function update(dt){
+  t += dt;
+  if(mode==='dead'){
+    deathT += dt;
+    if(dw){ dw.vy += 1500*dt; dw.x += dw.vx*dt; dw.y += dw.vy*dt; dw.rot += 5*dt; }
+    updateFx(dt); return;
+  }
+  if(mode!=='play'){ updateFx(dt); return; }
+
+  speed = Math.min(760, speed + dt*7);
+  dist += speed*dt;
+  player.run += dt*speed/55;
+
+  // vertical physics
+  player.vy = Math.min(MAX_FALL, player.vy + GRAV*dt);
+  player.y += player.vy*dt;
+  if(player.y >= GROUND-0.5){
+    if(overGapAt(dist+PX)) player.falling = true;
+    else {
+      if(player.jump){ player.jump=false; puff(PX, GROUND, 4, '#8f7ce0', 45); }
+      player.y = GROUND; player.vy = 0;
+    }
+  }
+  player.coyote = (!player.falling && player.y <= GROUND+0.5 && player.vy >= 0) ? 0.09 : player.coyote-dt;
+  if(player.falling && player.y > GROUND+120){ die('fall'); return; }
+  if(player.slide > 0) player.slide -= dt;
+
+  // staff trail
+  if(Math.random() < dt*30)
+    parts.push({ x:PX+34, y:player.y-72, vx:-40-Math.random()*40, vy:-10+Math.random()*20,
+                 life:0.5, max:0.5, col:runeAt(level)[1], r:1.5+Math.random()*2 });
+
+  // objects
+  const slid = player.slide > 0;
+  const pTop = player.y - (slid ? 26 : 58), pBot = player.y;
+  const cy = player.y - (slid ? 14 : 30);
+  for(const o of objects){
+    const sx = o.x - dist;
+    if(o.t==='ess' && !o.dead){
+      if(Math.abs(sx-PX) < 34 && Math.abs(o.y-cy) < 46){
+        o.dead = true; essence++; essenceGot++; xp += 2; xpTotal += 2;
+        floatTxt(sx, o.y-14, '+1', '#8fe3ff');
+        puff(sx, o.y, 5, '#8fe3ff', 70); sfxPick();
+      }
+    } else if(o.t==='arch'){
+      if(sx > PX-160 && sx < PX+160){                        // slab [x-88,x+88] x [GROUND-150,GROUND-40]
+        if(PX+22 > sx-88 && PX-22 < sx+88 && pTop < GROUND-40 && pBot > GROUND-150){ die('arch'); return; }
+      }
+    } else if(o.t==='altar' && !o.done && sx <= PX+32){
+      o.done = true;
+      if(essence >= 3){
+        combo++;
+        const mult = 1 + 0.25*Math.min(combo-1, 8);
+        const gain = Math.round(15*mult);
+        essence -= 3; runes += 3; xp += gain; xpTotal += gain;
+        const rc = runeAt(level)[1];
+        puff(sx, GROUND-120, 14, rc, 130);
+        floatTxt(sx, GROUND-160, '+'+gain+' XP', rc, true);
+        if(combo > 1) floatTxt(sx, GROUND-190, 'combo ×'+mult.toFixed(2), '#ffe97d');
+        sfxCraft();
+      } else {
+        combo = 0;
+        floatTxt(sx, GROUND-140, 'need 3 essence!', '#ff9d9d');
+      }
+    }
+  }
+
+  // level ups
+  let gained = 0;
+  while(xp >= xpNeed(level)){ xp -= xpNeed(level); level++; gained++; }
+  if(gained){
+    const r = RUNES.find(q => q[2] === level);
+    banner = { txt:'RUNECRAFTING LEVEL '+level, sub: r ? r[0].toUpperCase()+' RUNES UNLOCKED' : 'THE SHRINES SING LOUDER', life:2.4 };
+    speed = Math.min(820, speed + 12*gained);
+    puff(PX, player.y-60, 16, (r||['',' #ffe97d'])[1] || '#ffe97d', 150);
+    sfxLevel();
+  }
+
+  // milestone
+  const mile = Math.floor(dist/500);
+  if(mile > lastMile){ lastMile = mile; floatTxt(W/2, 240, mile*500+'m', '#e8e8ff', true); }
+
+  spawn();
+  updateFx(dt);
+}
+function updateFx(dt){
+  for(const p of parts){ p.life -= dt; p.x += p.vx*dt; p.y += p.vy*dt; p.vy += 300*dt; }
+  parts = parts.filter(p => p.life > 0);
+  for(const f of floats){ f.life -= dt; f.y -= 42*dt; }
+  floats = floats.filter(f => f.life > 0);
+  if(banner){ banner.life -= dt; if(banner.life <= 0) banner = null; }
+  if(shake > 0) shake = Math.max(0, shake - dt*22);
+}
+
+/* ---------------- audio ---------------- */
+let AC = null;
+function initAudio(){ if(!AC){ try{ AC = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(AC && AC.state==='suspended') AC.resume(); }
+function tone(f0, f1, dur, type, vol, delay){
+  if(!AC) return;
+  try{
+    const t0 = AC.currentTime + (delay||0);
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type||'sine';
+    o.frequency.setValueAtTime(f0, t0);
+    o.frequency.exponentialRampToValueAtTime(Math.max(f1,1), t0+dur);
+    g.gain.setValueAtTime(vol||0.12, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0+dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(t0); o.stop(t0+dur+0.05);
+  }catch(e){}
+}
+function sfxJump(){ tone(260, 540, 0.16, 'square', 0.07); }
+function sfxPick(){ tone(880, 1320, 0.09, 'sine', 0.09); }
+function sfxCraft(){ tone(520, 520, 0.12, 'triangle', 0.1); tone(660, 660, 0.12, 'triangle', 0.1, 0.07); tone(880, 880, 0.2, 'triangle', 0.1, 0.14); }
+function sfxLevel(){ [660,830,990,1320].forEach((f,i)=>tone(f, f, 0.15, 'triangle', 0.09, i*0.08)); }
+function sfxDeath(){ tone(360, 55, 0.7, 'sawtooth', 0.16); tone(240, 40, 0.8, 'square', 0.08, 0.05); }
+
+/* ---------------- draw helpers ---------------- */
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function txt(s,x,y,size,col,align,weight,fam){
+  ctx.font = (weight||700)+' '+size+'px '+(fam||'Georgia, serif');
+  ctx.fillStyle = col; ctx.textAlign = align||'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText(s, x, y);
+}
+function gem(x,y,r,col,glow){
+  if(glow){ ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = glow; }
+  ctx.beginPath();
+  ctx.moveTo(x,y-r); ctx.lineTo(x+r*0.7,y); ctx.lineTo(x,y+r); ctx.lineTo(x-r*0.7,y);
+  ctx.closePath();
+  ctx.fillStyle = col; ctx.fill();
+  if(glow){ ctx.restore(); }
+  ctx.fillStyle = 'rgba(255,255,255,.55)';
+  ctx.beginPath(); ctx.moveTo(x,y-r*0.55); ctx.lineTo(x+r*0.32,y); ctx.lineTo(x,y+r*0.25); ctx.lineTo(x-r*0.32,y); ctx.closePath(); ctx.fill();
+}
+function hash(n){ const s = Math.sin(n*127.1)*43758.5453; return s - Math.floor(s); }
+
+/* ---------------- scenery ---------------- */
+function drawSky(){
+  // ambient fill across the entire device canvas (letterbox included)
+  ctx.setTransform(view.dpr,0,0,view.dpr,0,0);
+  const g = ctx.createLinearGradient(0,0,0,view.ch);
+  g.addColorStop(0,'#0a0618'); g.addColorStop(1,'#100a22');
+  ctx.fillStyle = g; ctx.fillRect(0,0,view.cw,view.ch);
+}
+function drawWorldBG(){
+  // aurora bands
+  for(let i=0;i<2;i++){
+    ctx.beginPath();
+    const base = 70+i*46, amp = 26+8*i;
+    ctx.moveTo(-10, base);
+    for(let x=-10;x<=W+10;x+=30) ctx.lineTo(x, base + Math.sin(x*0.008 + t*(0.5+0.3*i) + i*2)*amp);
+    ctx.lineTo(W+10, base-60); ctx.lineTo(-10, base-60); ctx.closePath();
+    ctx.fillStyle = i ? 'rgba(64,32,110,0.16)' : 'rgba(40,70,120,0.14)';
+    ctx.fill();
+  }
+  // stars
+  const span = W+60;
+  for(let i=0;i<70;i++){
+    const sx = (((hash(i)*span*3 - dist*0.045) % span) + span) % span - 30;
+    const sy = 14 + hash(i+7)*230;
+    const tw = 0.5 + 0.5*Math.sin(t*2 + i*1.7);
+    ctx.globalAlpha = 0.25 + 0.55*tw;
+    ctx.fillStyle = '#cfd6ff';
+    ctx.fillRect(sx, sy, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+  // far mountains
+  ctx.beginPath(); ctx.moveTo(-10, GROUND);
+  for(let x=-10;x<=W+10;x+=36){
+    const wx = x + dist*0.15;
+    ctx.lineTo(x, 296 - Math.sin(wx*0.004)*46 - Math.sin(wx*0.0013+2)*66 - Math.sin(wx*0.011)*10);
+  }
+  ctx.lineTo(W+10, GROUND); ctx.closePath();
+  ctx.fillStyle = '#171030'; ctx.fill();
+  // ruined towers (parallax .3)
+  const p1 = 300, off1 = dist*0.3, k1 = Math.floor(off1/p1)-1;
+  for(let k=0;k<W/p1+2;k++){
+    const wx = (k1+k)*p1, sx = wx - off1, h1 = 130 + hash(k1+k)*150, w1 = 34 + hash(k1+k+3)*30;
+    ctx.fillStyle = '#1d1438';
+    ctx.fillRect(sx, GROUND-h1, w1, h1);
+    ctx.beginPath(); ctx.moveTo(sx-6, GROUND-h1); ctx.lineTo(sx+w1/2, GROUND-h1-24-hash(k1+k)*18); ctx.lineTo(sx+w1+6, GROUND-h1); ctx.closePath(); ctx.fill();
+    const wc = hash(k1+k+9) > 0.5;
+    ctx.fillStyle = wc ? 'rgba(143,227,255,'+(0.3+0.3*Math.sin(t*3+wx))+')' : 'rgba(255,154,61,'+(0.25+0.25*Math.sin(t*2.2+wx))+')';
+    ctx.fillRect(sx+w1/2-3, GROUND-h1*0.6, 6, 9);
+  }
+  // dead trees / columns (parallax .5)
+  const p2 = 230, off2 = dist*0.5, k2 = Math.floor(off2/p2)-1;
+  for(let k=0;k<W/p2+2;k++){
+    const wx = (k2+k)*p2, sx = wx - off2, h2 = 60 + hash(k2+k+21)*70;
+    ctx.strokeStyle = '#221641'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(sx, GROUND); ctx.lineTo(sx+6, GROUND-h2); ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(sx+6, GROUND-h2*0.7); ctx.lineTo(sx+26, GROUND-h2*0.9); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx+6, GROUND-h2*0.55); ctx.lineTo(sx-18, GROUND-h2*0.75); ctx.stroke();
+  }
+}
+function drawGround(){
+  const gaps = objects.filter(o => o.t==='gap' && o.x+o.gw > dist-40 && o.x < dist+W+40)
+                      .map(o => [o.x-dist, o.x-dist+o.gw]).sort((a,b)=>a[0]-b[0]);
+  let segs = [], cur = -20;
+  for(const g of gaps){ if(g[0] > cur) segs.push([cur, Math.min(g[0], W+20)]); cur = Math.max(cur, g[1]); }
+  if(cur < W+20) segs.push([cur, W+20]);
+
+  for(const s of segs){
+    const x0 = s[0], w0 = s[1]-s[0];
+    const g = ctx.createLinearGradient(0,GROUND,0,H);
+    g.addColorStop(0,'#241744'); g.addColorStop(1,'#120b26');
+    ctx.fillStyle = g; ctx.fillRect(x0, GROUND, w0, H-GROUND);
+    ctx.fillStyle = '#3f6d5c'; ctx.fillRect(x0, GROUND, w0, 4);
+    ctx.fillStyle = 'rgba(143,227,255,0.25)'; ctx.fillRect(x0, GROUND-1, w0, 1);
+    // pebbles
+    for(let wx = Math.floor((dist+x0)/64)*64; wx < dist+x0+w0; wx += 64){
+      const sx = wx - dist + hash(wx)*40;
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.fillRect(sx, GROUND+16+hash(wx+1)*50, 10+hash(wx+2)*14, 3);
+    }
+  }
+  // glowing chasm lips
+  for(const g of gaps){
+    ctx.strokeStyle = 'rgba(255,61,94,0.5)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(g[0], GROUND); ctx.lineTo(g[0], GROUND+26); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(g[1], GROUND); ctx.lineTo(g[1], GROUND+26); ctx.stroke();
+  }
+}
+
+/* ---------------- object + player drawing ---------------- */
+function drawObjects(){
+  for(const o of objects){
+    const sx = o.x - dist;
+    if(sx < -140 || sx > W+140) continue;
+    if(o.t==='ess'){
+      if(o.dead) continue;
+      const bob = Math.sin(t*4 + o.x)*4;
+      gem(sx, o.y+bob, 11, '#8fe3ff', 14);
+    } else if(o.t==='altar'){
+      const rc = runeAt(level)[1], dim = o.done ? 0.35 : 1;
+      ctx.save(); ctx.globalAlpha = dim;
+      ctx.fillStyle = '#2a1d52';
+      ctx.fillRect(sx-16, GROUND-150, 32, 150);
+      ctx.fillStyle = '#3a2a6e';
+      ctx.fillRect(sx-20, GROUND-158, 40, 12);
+      ctx.fillRect(sx-22, GROUND-6, 44, 6);
+      // carved glyph
+      gem(sx, GROUND-100, 8, rc, 0);
+      // beam + floating rune
+      if(!o.done){
+        const bg = ctx.createLinearGradient(0, GROUND-260, 0, GROUND-140);
+        bg.addColorStop(0,'rgba(143,227,255,0)'); bg.addColorStop(1,'rgba(143,227,255,0.18)');
+        ctx.fillStyle = bg; ctx.fillRect(sx-26, GROUND-260, 52, 120);
+      }
+      const bob = Math.sin(t*3 + o.x)*6;
+      gem(sx, GROUND-185+bob, 13, rc, o.done ? 0 : 18);
+      ctx.restore();
+    } else if(o.t==='arch'){
+      // pillars (safe)
+      ctx.fillStyle = '#2a1d52';
+      ctx.fillRect(sx-104, GROUND-170, 26, 170);
+      ctx.fillRect(sx+78, GROUND-170, 26, 170);
+      ctx.fillStyle = '#3a2a6e';
+      ctx.fillRect(sx-108, GROUND-176, 34, 10);
+      ctx.fillRect(sx+74, GROUND-176, 34, 10);
+      // cursed slab (deadly)
+      ctx.fillStyle = '#33235e';
+      ctx.fillRect(sx-88, GROUND-150, 176, 110);
+      ctx.fillStyle = '#453078';
+      ctx.fillRect(sx-88, GROUND-40, 176, 8);
+      const glow = 0.4 + 0.3*Math.sin(t*5);
+      ctx.fillStyle = 'rgba(255,61,94,'+glow+')';
+      ctx.fillRect(sx-88, GROUND-44, 176, 3);
+      gem(sx-40, GROUND-95, 7, '#ff3d5e', 8); gem(sx+40, GROUND-95, 7, '#ff3d5e', 8);
+    }
+  }
+}
+function drawWizard(x, y, opts){
+  const o = opts||{}, slid = o.slide, air = o.air;
+  ctx.save();
+  ctx.translate(x, y);
+  if(slid){ ctx.rotate(-0.5); ctx.scale(1, 0.8); }
+  const bob = (!air && !slid) ? Math.abs(Math.sin((o.run||0)*6))*3 : 0;
+
+  // legs
+  if(!air && !slid){
+    const sw = Math.sin((o.run||0)*10);
+    ctx.strokeStyle = '#241a3f'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-4, -10); ctx.lineTo(-4 + sw*9, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(4, -10); ctx.lineTo(4 - sw*9, 0); ctx.stroke();
+  } else {
+    ctx.strokeStyle = '#241a3f'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-4, -10); ctx.lineTo(-10, -3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(4, -10); ctx.lineTo(10, -5); ctx.stroke();
+  }
+
+  ctx.translate(0, -bob);
+  // robe
+  ctx.beginPath();
+  ctx.moveTo(0, -62);
+  ctx.quadraticCurveTo(-20, -30, -19, -2);
+  ctx.lineTo(19, -2);
+  ctx.quadraticCurveTo(20, -30, 0, -62);
+  ctx.closePath();
+  ctx.fillStyle = '#3b2a6e'; ctx.fill();
+  ctx.strokeStyle = '#8f7ce0'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-17, -5); ctx.lineTo(17, -5); ctx.stroke();
+  // belt
+  ctx.fillStyle = '#241a3f'; ctx.fillRect(-13, -32, 26, 5);
+  // staff + orb
+  ctx.strokeStyle = '#6b543a'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(24, -68); ctx.lineTo(31, -2); ctx.stroke();
+  const pulse = 0.6 + 0.4*Math.sin(t*6);
+  ctx.save(); ctx.shadowColor = o.orb||'#8fe3ff'; ctx.shadowBlur = 14*pulse;
+  ctx.fillStyle = o.orb||'#8fe3ff';
+  ctx.beginPath(); ctx.arc(24, -70, 6, 0, 7); ctx.fill(); ctx.restore();
+  // arm to staff
+  ctx.strokeStyle = '#3b2a6e'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(2, -48); ctx.lineTo(22, -52); ctx.stroke();
+  // head + beard
+  ctx.fillStyle = '#e8c9a8'; ctx.beginPath(); ctx.arc(0, -72, 9, 0, 7); ctx.fill();
+  ctx.fillStyle = '#d8d8e8';
+  ctx.beginPath(); ctx.moveTo(-6, -70); ctx.lineTo(0, -58); ctx.lineTo(6, -70); ctx.closePath(); ctx.fill();
+  // hat
+  ctx.fillStyle = '#2c1f52';
+  ctx.beginPath(); ctx.ellipse(0, -80, 15, 4.5, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-12, -80); ctx.lineTo(12, -80); ctx.lineTo(3, -110); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffe97d';
+  ctx.beginPath(); ctx.arc(2, -92, 2.2, 0, 7); ctx.fill();
+  ctx.restore();
+}
+function drawDeadWizard(){
+  if(!dw) return;
+  ctx.save();
+  ctx.translate(dw.x, dw.y); ctx.rotate(dw.rot);
+  ctx.fillStyle = '#3b2a6e';
+  ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(-16, 10); ctx.lineTo(16, 10); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#e8c9a8'; ctx.beginPath(); ctx.arc(0, -38, 8, 0, 7); ctx.fill();
+  ctx.fillStyle = '#2c1f52';
+  ctx.beginPath(); ctx.moveTo(-11, -44); ctx.lineTo(11, -44); ctx.lineTo(2, -64); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+/* ---------------- HUD ---------------- */
+function panel(x,y,w,h){
+  ctx.fillStyle = 'rgba(10,6,24,0.6)';
+  roundRect(x,y,w,h,10); ctx.fill();
+  ctx.strokeStyle = 'rgba(150,120,255,0.35)'; ctx.lineWidth = 1.5;
+  roundRect(x,y,w,h,10); ctx.stroke();
+}
+function drawHUD(){
+  const rc = runeAt(level);
+  // left: level + xp
+  panel(16, 14, 240, 58);
+  gem(40, 40, 13, rc[1], 12);
+  txt(rc[3], 40, 45, 10, '#120b26', 'center', 800);
+  txt('RC '+level, 62, 36, 17, '#e8e8ff');
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; roundRect(62, 44, 180, 9, 4); ctx.fill();
+  const frac = Math.min(1, xp/xpNeed(level));
+  ctx.fillStyle = rc[1]; roundRect(62, 44, Math.max(6, 180*frac), 9, 4); ctx.fill();
+  txt(xp+'/'+xpNeed(level)+' xp', 62, 68, 11, 'rgba(232,232,255,0.6)');
+  // essence counter
+  gem(196, 58, 9, '#8fe3ff', 0);
+  txt('×'+essence, 210, 63, 13, '#8fe3ff');
+  // right: distance + best
+  panel(W-206, 14, 190, 58);
+  txt(Math.floor(dist)+'m', W-26, 40, 21, '#e8e8ff', 'right');
+  txt('best '+best+'m', W-26, 60, 12, 'rgba(232,232,255,0.55)', 'right');
+  // combo
+  if(combo > 1){
+    const m = (1 + 0.25*Math.min(combo-1, 8)).toFixed(2);
+    const s = 15 + 2*Math.sin(t*7);
+    txt('COMBO ×'+m, W/2, 38, s, '#ffe97d', 'center');
+  }
+  // banner
+  if(banner){
+    const a = Math.min(1, banner.life/0.4);
+    ctx.globalAlpha = a;
+    txt(banner.txt, W/2, 150, 34, '#ffe97d', 'center');
+    txt(banner.sub, W/2, 178, 16, '#e8e8ff', 'center');
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ---------------- screens ---------------- */
+function drawTitle(){
+  ctx.fillStyle = 'rgba(8,5,15,0.55)'; ctx.fillRect(-40,-40,W+80,H+80);
+  const glow = 0.6 + 0.4*Math.sin(t*2);
+  ctx.save();
+  ctx.shadowColor = '#8f7ce0'; ctx.shadowBlur = 30*glow;
+  txt('RUNESPRINT', W/2, 150, 64, '#e8e8ff', 'center', 800);
+  ctx.restore();
+  txt('— ESSENCE ETERNAL —', W/2, 184, 17, '#8fe3ff', 'center');
+  txt('Outrun the decay. Gather essence. Craft runes at the shrines.', W/2, 218, 15, 'rgba(232,232,255,0.75)', 'center');
+
+  // wizard preview
+  drawWizard(190, 360, { run: t*1.6, orb: runeAt(level)[1] });
+  for(let i=0;i<6;i++){
+    const a = t*1.4 + i*Math.PI/3;
+    gem(190+Math.cos(a)*90, 300+Math.sin(a)*34, 8, RUNES[i%12][1], 10);
+  }
+
+  txt('SPACE / ↑  jump        ↓  slide (fast-fall in air)', W/2, 408, 15, '#e8e8ff', 'center');
+  txt('P  pause        on touch: tap top = jump · tap bottom = slide', W/2, 434, 15, 'rgba(232,232,255,0.65)', 'center');
+  txt('3 essence at an altar → runes + XP → level up → new runes', W/2, 462, 14, '#ffe97d', 'center');
+
+  const bl = 0.55 + 0.45*Math.sin(t*3);
+  ctx.globalAlpha = bl;
+  txt('PRESS SPACE OR TAP TO RUN', W/2, 505, 18, '#8fe3ff', 'center');
+  ctx.globalAlpha = 1;
+}
+function drawDeath(){
+  const k = Math.min(1, deathT*3);           // ease-in
+  const e = 1 - Math.pow(1-k, 3);
+  ctx.fillStyle = 'rgba(5,2,12,'+(0.72*e)+')'; ctx.fillRect(-40,-40,W+80,H+80);
+
+  const pw = 560, ph = 380, px = (W-pw)/2, py = 78 + (1-e)*40;
+  ctx.save();
+  ctx.translate(W/2, py+ph/2); ctx.scale(e, e); ctx.translate(-W/2, -(py+ph/2));
+  ctx.shadowColor = 'rgba(255,61,94,0.5)'; ctx.shadowBlur = 34;
+  ctx.fillStyle = '#171030';
+  roundRect(px, py, pw, ph, 16); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(255,61,94,0.7)'; ctx.lineWidth = 2;
+  roundRect(px+5, py+5, pw-10, ph-10, 12); ctx.stroke();
+  ctx.strokeStyle = 'rgba(150,120,255,0.35)'; ctx.lineWidth = 1;
+  roundRect(px, py, pw, ph, 16); ctx.stroke();
+
+  const gl = 0.7 + 0.3*Math.sin(t*4);
+  ctx.save(); ctx.shadowColor = '#ff3d5e'; ctx.shadowBlur = 22*gl;
+  txt('OH DEAR, YOU ARE DEAD!', W/2, py+58, 30, '#ff3d5e', 'center', 800);
+  ctx.restore();
+  txt(deathInfo.reason==='fall' ? 'The abyss claimed you.' : 'Clipped by a cursed archway.', W/2, py+84, 15, 'rgba(232,232,255,0.7)', 'center');
+  if(deathInfo.newBest){
+    const b = 0.6 + 0.4*Math.sin(t*6);
+    ctx.globalAlpha = b;
+    txt('★ NEW BEST RUN ★', W/2, py+112, 16, '#ffe97d', 'center');
+    ctx.globalAlpha = 1;
+  }
+
+  const rows = [
+    ['Distance', Math.floor(deathInfo.dist)+'m'],
+    ['Essence gathered', deathInfo.essenceGot],
+    ['Runes crafted', deathInfo.runes],
+    ['XP earned', deathInfo.xp],
+    ['Runecrafting level', deathInfo.level],
+    ['Best run', best+'m']
+  ];
+  const rc = runeAt(deathInfo.level);
+  rows.forEach((r, i) => {
+    const y = py+150 + i*32, cx = px+70;
+    txt(r[0], cx, y, 16, 'rgba(232,232,255,0.75)');
+    txt(String(r[1]), px+pw-70, y, 18, i===0 && deathInfo.newBest ? '#ffe97d' : '#e8e8ff', 'right');
+  });
+  // rune gems row
+  for(let i=0;i<3;i++) gem(px+pw/2-30+i*30, py+ph-28, 9, rc[1], 10);
+  txt(rc[0]+' runes attuned', px+pw/2+70, py+ph-23, 13, rc[1]);
+
+  if(deathT > 0.5){
+    const bl = 0.55 + 0.45*Math.sin(t*3);
+    ctx.globalAlpha = bl;
+    txt('SPACE OR TAP — RUN AGAIN', W/2, py+ph+38, 17, '#8fe3ff', 'center');
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+function drawPause(){
+  ctx.fillStyle = 'rgba(8,5,15,0.6)'; ctx.fillRect(-40,-40,W+80,H+80);
+  txt('PAUSED', W/2, 250, 44, '#e8e8ff', 'center', 800);
+  txt('P or tap to resume', W/2, 286, 16, 'rgba(232,232,255,0.7)', 'center');
+}
+
+/* ---------------- render ---------------- */
+function render(){
+  drawSky();
+  ctx.setTransform(view.dpr,0,0,view.dpr,0,0);
+  ctx.translate(view.ox, view.oy); ctx.scale(view.s, view.s);
+  if(shake > 0) ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+
+  drawWorldBG();
+  drawGround();
+  drawObjects();
+  // particles
+  for(const p of parts){
+    ctx.globalAlpha = Math.max(0, p.life/p.max);
+    ctx.fillStyle = p.col;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  if(mode==='dead'){ drawDeadWizard(); }
+  else if(mode!=='title'){
+    drawWizard(PX, player.y, {
+      run: player.run,
+      slide: player.slide > 0 && player.y >= GROUND-1,
+      air: player.y < GROUND-1,
+      orb: runeAt(level)[1]
+    });
+  }
+  // floaters
+  for(const f of floats){
+    ctx.globalAlpha = Math.min(1, f.life*2);
+    txt(f.txt, f.x, f.y, f.big ? 24 : 15, f.col, 'center');
+  }
+  ctx.globalAlpha = 1;
+
+  if(mode==='play' || mode==='paused') drawHUD();
+  if(mode==='title') drawTitle();
+  else if(mode==='dead') drawDeath();
+  else if(mode==='paused') drawPause();
+}
+
+/* ---------------- input ---------------- */
+function toWorld(e){
+  const r = cvs.getBoundingClientRect();
+  return [(e.clientX - r.left - view.ox)/view.s, (e.clientY - r.top - view.oy)/view.s];
+}
+function pressAction(wx, wy){
+  initAudio();
+  if(mode==='title'){ start(); return; }
+  if(mode==='dead'){ if(deathT > 0.5) start(); return; }
+  if(mode==='paused'){ mode='play'; return; }
+  if(mode==='play'){
+    jumpHeld = true;
+    if(wy > H*0.62) doSlide(); else doJump();
+  }
+}
+cvs.addEventListener('pointerdown', e => { e.preventDefault(); const [wx,wy] = toWorld(e); pressAction(wx,wy); });
+window.addEventListener('pointerup', () => { jumpHeld = false; if(player.vy < -280) player.vy = -280; });
+window.addEventListener('pointercancel', () => { jumpHeld = false; });
+window.addEventListener('keydown', e => {
+  if(e.repeat) return;
+  initAudio();
+  if(e.code==='Space' || e.code==='ArrowUp' || e.code==='KeyW'){
+    e.preventDefault();
+    if(mode==='title' || (mode==='dead' && deathT > 0.5)) start();
+    else if(mode==='paused') mode='play';
+    else if(mode==='play'){ jumpHeld = true; doJump(); }
+  } else if(e.code==='ArrowDown' || e.code==='KeyS'){
+    e.preventDefault(); doSlide();
+  } else if(e.code==='KeyP' || e.code==='Escape'){
+    if(mode==='play') mode='paused'; else if(mode==='paused') mode='play';
+  } else if(e.code==='Enter'){
+    if(mode==='title' || (mode==='dead' && deathT > 0.5)) start();
+  }
+});
+window.addEventListener('keyup', e => {
+  if(e.code==='Space' || e.code==='ArrowUp' || e.code==='KeyW'){
+    jumpHeld = false; if(player.vy < -280) player.vy = -280;
+  }
+});
+document.addEventListener('visibilitychange', () => { if(document.hidden && mode==='play') mode='paused'; });
+window.addEventListener('contextmenu', e => e.preventDefault());
+
+/* ---------------- main loop (fixed timestep) ---------------- */
+const STEP = 1/120;
+let acc = 0, last = performance.now();
+function frame(now){
+  let dt = (now - last)/1000; last = now;
+  if(dt > 0.1) dt = 0.1;
+  acc += dt;
+  let guard = 0;
+  while(acc >= STEP && guard++ < 20){ update(STEP); acc -= STEP; }
+  render();
+  requestAnimationFrame(frame);
+}
 requestAnimationFrame(frame);
-function rr(x,y,w,h,r,fill,stroke=null,lw=1){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.lineWidth=lw;ctx.strokeStyle=stroke;ctx.stroke()}}
-function text(s,x,y,size,color,weight=600,align='left',font='Manrope'){ctx.font=`${weight} ${size}px ${font}`;ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillStyle=color;ctx.fillText(s,x,y)}
-function line(x1,y1,x2,y2,color,width=1){ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke()}
-function circle(x,y,r,fill,stroke=null,lw=1){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke()}}
-function draw(){ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#101a20';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.setTransform(scale,0,0,scale,ox,oy);if(shake)ctx.translate(rand(-shake,shake),rand(-shake,shake));drawWorld();if(portrait){if(mode==='title')drawPortraitTitle();else{drawPortraitHUD();if(mode==='paused')drawPortraitPause();if(mode==='over')drawPortraitOver()}}else if(mode==='title')drawTitle();else{drawHUD();if(mode==='paused')drawPause();if(mode==='over')drawOver()}}
-function drawWorld(){let sky=ctx.createLinearGradient(0,0,0,H);sky.addColorStop(0,'#1b3037');sky.addColorStop(.58,'#687b70');sky.addColorStop(1,'#c1a477');ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
-// distant moons and stars
-circle(982,125,62,'#e7d6a51a');circle(982,125,39,'#e8d9ba55');circle(998,115,38,'#263941');for(let i=0;i<42;i++){let x=(i*173+42)%W,y=(i*79+22)%300;circle(x,y,((i*3)%4)/2+.7,'#f3e7c977')}
-// mountain silhouettes
-ctx.beginPath();ctx.moveTo(0,397);for(let x=0;x<=W;x+=8){let y=340+Math.sin((x+dist*.09)/130)*35+Math.sin(x/47)*9;ctx.lineTo(x,y)}ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.closePath();ctx.fillStyle='#425d59';ctx.fill();ctx.beginPath();ctx.moveTo(0,426);for(let x=0;x<=W;x+=8)ctx.lineTo(x,373+Math.sin((x+dist*.2)/155)*27+Math.sin(x/72)*14);ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.closePath();ctx.fillStyle='#344d48';ctx.fill();
-// distant ruins
-for(let i=0;i<7;i++){let x=((i*230-dist*.24)%1450+1450)%1450-80;ctx.fillStyle='#243a3a99';ctx.fillRect(x,300,17,100);ctx.fillRect(x-9,295,35,10);ctx.fillRect(x+16,320,31,78);ctx.fillRect(x+10,316,43,8)}
-// floating wisps in the sky
-for(let i=0;i<9;i++){let x=((i*167-dist*.12)%1250+1250)%1250;let y=220+(i%3)*49+Math.sin(elapsed*1.1+i)*7;circle(x,y,3,'#eac87955');circle(x,y,1.3,'#fff0bf')}
-// ground
-ctx.fillStyle='#263a33';ctx.fillRect(0,ground,W,H-ground);ctx.fillStyle='#8c7652';ctx.fillRect(0,ground,W,6);ctx.fillStyle='#bba274';ctx.fillRect(0,ground+6,W,2);for(let i=0;i<95;i++){let x=((i*83-dist*7)%1300+1300)%1300;let y=ground+18+(i*31)%130;line(x,y,x+12,y-2,'#82916d55',1)}
-// path markings
-for(let i=0;i<20;i++){let x=((i*95-dist*7)%1320+1320)%1320;ctx.fillStyle='#d5c18b22';ctx.fillRect(x,ground+1,36,2)}
-// trees, shrubs
-for(let i=0;i<12;i++){let x=((i*137-dist*.55)%1500+1500)%1500-120;let h=65+(i*31)%50;ctx.fillStyle='#223c34';ctx.beginPath();ctx.moveTo(x,ground);ctx.lineTo(x+13,ground-h);ctx.lineTo(x+27,ground);ctx.fill();ctx.beginPath();ctx.moveTo(x+6,ground-h*.55);ctx.lineTo(x+20,ground-h-13);ctx.lineTo(x+34,ground-h*.55);ctx.fill();circle(x+48,ground-13,12,'#405846')}
-for(const o of objects)drawObject(o);
-// altar arrival glow
-if(altarFlash>0){ctx.fillStyle=`rgba(141,205,224,${altarFlash*.15})`;ctx.fillRect(0,0,W,H)}
-drawWizard();for(const p of particles){ctx.globalAlpha=clamp(p.life/p.max,0,1);circle(p.x,p.y,p.size,p.color)}ctx.globalAlpha=1;for(const f of floaters){ctx.globalAlpha=clamp(f.life,0,1);text(f.text,f.x,f.y,13,f.color,700,'center')}ctx.globalAlpha=1;
-}
-function drawObject(o){if(o.type==='essence'){let y=o.y+Math.sin(o.phase)*6;ctx.save();ctx.translate(o.x,y);ctx.rotate(Math.sin(o.phase)*.18);ctx.shadowColor='#9ce4f7';ctx.shadowBlur=15;ctx.beginPath();ctx.moveTo(0,-14);ctx.lineTo(10,-5);ctx.lineTo(8,9);ctx.lineTo(0,14);ctx.lineTo(-8,9);ctx.lineTo(-10,-5);ctx.closePath();ctx.fillStyle='#a5d7e1';ctx.fill();ctx.shadowBlur=0;ctx.strokeStyle='#e7ffff';ctx.lineWidth=1.5;ctx.stroke();line(-3,-6,3,7,'#fff9');ctx.restore();circle(o.x,y,17,'#bdeeff0a')}
-else if(o.type==='rock'){ctx.fillStyle='#604d3b';ctx.beginPath();ctx.moveTo(o.x-25,ground);ctx.lineTo(o.x-22,ground-24);ctx.lineTo(o.x-8,ground-40);ctx.lineTo(o.x+9,ground-34);ctx.lineTo(o.x+25,ground-11);ctx.lineTo(o.x+23,ground);ctx.closePath();ctx.fill();line(o.x-9,ground-28,o.x+3,ground-20,'#a78d65',2);line(o.x+5,ground-24,o.x+15,ground-14,'#806c4e',2)}
-else if(o.type==='wisp'){let y=ground-43+Math.sin(o.phase*2)*4;circle(o.x,y,13,'#b44c42');circle(o.x,y,9,'#f08962');circle(o.x-3,y-2,2,'#ffe3bd');circle(o.x+4,y-2,2,'#ffe3bd');line(o.x-13,y+15,o.x-6,y+23,'#c46150',2);line(o.x+12,y+15,o.x+5,y+22,'#c46150',2)}
-else if(o.type==='altar'){drawAltar(o.x,ground,1);}}
-function drawAltar(x,y,s=1){ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.shadowColor='#95d9ed';ctx.shadowBlur=altarFlash*30+6;ctx.fillStyle='#536c70';ctx.beginPath();ctx.moveTo(-44,0);ctx.lineTo(-35,-62);ctx.lineTo(35,-62);ctx.lineTo(44,0);ctx.closePath();ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='#788d89';ctx.fillRect(-31,-67,62,8);ctx.fillStyle='#42575a';ctx.fillRect(-26,-55,52,55);ctx.strokeStyle='#bbd4c888';ctx.lineWidth=2;ctx.strokeRect(-30,-62,60,62);ctx.beginPath();ctx.arc(0,-48,19,0,Math.PI*2);ctx.fillStyle='#2c444d';ctx.fill();ctx.strokeStyle='#c9d8bd';ctx.stroke();circle(0,-48,10,'#a5e0dc');circle(0,-48,5,'#e6f4cf');line(-45,-2,45,-2,'#d7c89a',4);text('ALTAR',0,20,10,'#dac99a',700,'center','DM Mono');ctx.restore()}
-function drawWizard(){let x=250,y=player.y,run=Math.sin(player.run)*6,slideY=player.slide>0?22:0;ctx.save();ctx.translate(x,y-slideY);ctx.globalAlpha=player.invuln>0?.55+Math.sin(elapsed*25)*.35:1;ctx.fillStyle='#15211e77';ctx.beginPath();ctx.ellipse(0,2,26,7,0,0,Math.PI*2);ctx.fill();
-// legs and boots
-if(player.slide>0){rr(-24,-28,43,17,7,'#533f37');rr(9,-24,24,12,5,'#a7774c');rr(-25,-15,25,11,4,'#bc9665');}
-else{line(-9,-25,-14+run,-6,'#dec78b',7);line(10,-25,14-run,-5,'#dec78b',7);line(-14+run,-6,-22+run,-1,'#4a352f',8);line(14-run,-5,23-run,-1,'#4a352f',8)}
-// robe
-ctx.fillStyle='#354e64';ctx.beginPath();ctx.moveTo(-18,-72);ctx.quadraticCurveTo(-3,-81,14,-71);ctx.lineTo(25,-5);ctx.quadraticCurveTo(2,2,-25,-5);ctx.closePath();ctx.fill();ctx.strokeStyle='#a89d79';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#bfaa77';ctx.beginPath();ctx.moveTo(-18,-72);ctx.lineTo(0,-64);ctx.lineTo(15,-72);ctx.lineTo(7,-53);ctx.lineTo(-8,-53);ctx.closePath();ctx.fill();circle(0,-56,3,'#eff0c4');
-// arm, staff
-line(14,-60,25,-40,'#d7c38c',6);line(25,-40,34,-53,'#d7c38c',4);line(34,-53,36,-103,'#594633',4);circle(36,-108,7,'#b3e1df');circle(36,-108,3,'#fff2c2');
-// head, hair and hat
-circle(-1,-82,13,'#d8a777');ctx.fillStyle='#46362f';ctx.beginPath();ctx.arc(-3,-86,13,Math.PI,Math.PI*2);ctx.lineTo(11,-81);ctx.lineTo(-15,-80);ctx.fill();circle(4,-83,1.5,'#263033');
-ctx.fillStyle='#493d57';ctx.beginPath();ctx.moveTo(-22,-94);ctx.lineTo(7,-145);ctx.lineTo(17,-95);ctx.quadraticCurveTo(-3,-88,-22,-94);ctx.fill();ctx.strokeStyle='#b8a477';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(-3,-94,23,5,0,0,Math.PI*2);ctx.stroke();line(-7,-118,6,-114,'#d7bc78',3);ctx.restore();}
-function drawHUD(){// Header brand and stat cards
-rr(28,22,260,68,17,'#142228d9','#d7c69b42');circle(57,56,17,'#b58a54');text('✦',57,57,20,'#fff2c8',600,'center');text('RUNESPRINT',85,45,17,'#f4ead5',800);text('A RUNEC​​RAFTING RUN',85,68,9,'#a8b5a5',500,'left','DM Mono');
-rr(310,22,203,68,15,'#142228cc','#d7c69b35');text('DISTANCE',330,42,9,'#a7b3a5',500,'left','DM Mono');text(`${Math.floor(dist)} m`,330,66,21,'#f3e7d0',700);line(414,39,414,74,'#d4c39736');text('BEST',431,43,9,'#a7b3a5',500,'left','DM Mono');text(`${best} m`,431,66,17,'#dfc99a',700);
-rr(532,22,290,68,15,'#142228cc','#d7c69b35');circle(565,56,19,'#385d66');text('✧',565,57,20,'#c5eced',600,'center');text('RUNEC​​RAFTING',596,41,9,'#a7b3a5',500,'left','DM Mono');text(`LEVEL ${level}`,596,62,19,'#f3e7d0',800);let p=(xp-xpForLevel(level))/Math.max(1,xpForLevel(level+1)-xpForLevel(level));rr(596,76,205,5,3,'#33433f');rr(596,76,205*clamp(p,0,1),5,3,'#d5b66e');text(`${xp.toLocaleString()} XP`,802,78,9,'#b5b39a',500,'right','DM Mono');
-rr(840,22,160,68,15,'#142228cc','#d7c69b35');text('ESSENCE',860,42,9,'#a7b3a5',500,'left','DM Mono');circle(868,65,10,'#a8d7e2');circle(868,65,4,'#eef5df');text(`${essence}`,888,66,22,'#eff1d9',800);text('to craft',930,67,10,'#a7b3a5',500);
-rr(1018,22,154,68,15,'#142228cc','#d7c69b35');text('RUNES MADE',1037,42,9,'#a7b3a5',500,'left','DM Mono');text(`${runesMade}`,1037,66,22,'#dfc98d',800);rr(1128,101,44,30,10,'#142228bb','#e0d0a244');text('Ⅱ',1150,116,15,'#e7d8b8',700,'center');
-// upcoming rune progression strip
-rr(28,104,235,42,12,'#142228aa','#d7c69b2e');const current=runes.filter(r=>r[1]<=level).at(-1),next=runes.find(r=>r[1]>level);text('NEXT ALTAR',44,118,8,'#a7b3a5',500,'left','DM Mono');text(current?`${current[0]} rune`:'—',44,135,12,'#e8d4a0',700);if(next)text(`NEXT  ${next[0]} · LV ${next[1]}`,246,125,9,'#bad0c8',600,'right','DM Mono');
-if(craftTextTime>0){rr(376,125,448,42,12,'#253d3bdd','#bdd7cb55');text(craftText,600,146,13,'#f4e1a8',700,'center')}
-if(dist<190&&elapsed>1){rr(429,580,344,43,13,'#142228b8','#d7c69b24');text('Collect essence  →  reach an altar  →  craft runes',601,602,12,'#e6ddc9',600,'center')}
-}
-function drawTitle(){// Title screen overlay and hero panel
-ctx.fillStyle='#08111588';ctx.fillRect(0,0,W,H);rr(74,76,1052,548,28,'#101d22e8','#e0c99555',1.5);ctx.save();ctx.beginPath();ctx.roundRect(75,77,1050,546,27);ctx.clip();ctx.fillStyle='#b99b6833';ctx.beginPath();ctx.ellipse(860,310,320,220,-.4,0,Math.PI*2);ctx.fill();drawAltar(912,510,1.65);for(let i=0;i<8;i++){let x=735+i*55;circle(x,490-Math.sin(i)*28,7,'#bce3e7');circle(x,490-Math.sin(i)*28,3,'#fff')};ctx.restore();drawWizardPreview(860,510);
-text('A RUNEC​​RAFTING ENDLESS RUNNER',130,151,11,'#d2ba7e',700,'left','DM Mono');text('The path to',130,220,53,'#f4ead5',800);text('the altar.',130,278,53,'#e4c57c',800);text('Run, gather essence, and shape it into runes.',132,327,16,'#c5cec0',500);text('Every altar brings you closer to the next rune.',132,354,16,'#c5cec0',500);
-rr(130,405,234,64,15,'#bd9354');text('BEGIN YOUR RUN',247,437,14,'#172126',800,'center');text('PRESS SPACE OR TAP',247,488,9,'#e4d5b5',600,'center','DM Mono');
-line(130,525,650,525,'#d9c89c33');const points=[['01','GATHER','Catch drifting rune essence'],['02','CRAFT','Visit altars to bank it'],['03','LEVEL','Unlock 12 rune types']];points.forEach((p,i)=>{let x=132+i*181;text(p[0],x,557,10,'#d0ac68',700,'left','DM Mono');text(p[1],x+28,557,10,'#f2e7d0',800);text(p[2],x,581,9,'#a9b5a8',500)});text('AIR → MIND → WATER → EARTH → FIRE  ·  AND BEYOND',129,608,9,'#a4b8aa',500,'left','DM Mono');
-rr(922,108,161,39,13,'#142228bb','#d8c99a44');text('PERSONAL BEST',1002,121,8,'#9dac9d',600,'center','DM Mono');text(`${best} m`,1002,138,13,'#f0dfb9',700,'center');text('A lone mage, a long road,',897,572,11,'#e1d6bd',600,'center');text('and one very bright idea.',897,591,11,'#aebcae',500,'center')}
-function drawWizardPreview(x,y,s=1.6){ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.fillStyle='#101a2077';ctx.beginPath();ctx.ellipse(0,2,26,7,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#354e64';ctx.beginPath();ctx.moveTo(-18,-72);ctx.lineTo(15,-72);ctx.lineTo(25,-5);ctx.quadraticCurveTo(0,2,-25,-5);ctx.closePath();ctx.fill();ctx.strokeStyle='#b6a879';ctx.stroke();line(-9,-25,-15,-3,'#dec78b',7);line(10,-25,15,-3,'#dec78b',7);circle(-1,-83,13,'#d8a777');ctx.fillStyle='#493d57';ctx.beginPath();ctx.moveTo(-22,-94);ctx.lineTo(7,-145);ctx.lineTo(17,-95);ctx.quadraticCurveTo(-3,-88,-22,-94);ctx.fill();ctx.strokeStyle='#c5b27c';ctx.beginPath();ctx.ellipse(-3,-94,23,5,0,0,Math.PI*2);ctx.stroke();line(17,-59,35,-52,'#d7c38c',6);line(35,-52,36,-107,'#594633',4);circle(36,-112,7,'#b3e1df');ctx.restore()}
-function portraitBox(){return {x:250-Math.min(304,canvas.width/scale-22)/2,w:Math.min(304,canvas.width/scale-22)}}
-function drawPortraitTitle(){const b=portraitBox();ctx.fillStyle='#08111588';ctx.fillRect(b.x-6,75,b.w+12,545);rr(b.x,83,b.w,531,22,'#101d22ef','#e0c99555',1.5);text('A RUNEC​​RAFTING RUN',250,127,9,'#d2ba7e',700,'center','DM Mono');text('The path to',250,185,28,'#f4ead5',800,'center');text('the altar.',250,219,31,'#e4c57c',800,'center');text('Run, gather essence,',250,258,12,'#c5cec0',500,'center');text('and shape it into runes.',250,278,12,'#c5cec0',500,'center');drawAltar(250,488,1.05);drawWizardPreview(162,530,.85);for(let i=0;i<5;i++){circle(210+i*20,424-Math.sin(i)*10,4,'#c6e8e8');circle(210+i*20,424-Math.sin(i)*10,2,'#fff')};rr(250-b.w*.34,331,b.w*.68,53,13,'#bd9354');text('BEGIN YOUR RUN',250,357,13,'#172126',800,'center');text('TAP OR PRESS SPACE',250,399,9,'#e4d5b5',600,'center','DM Mono');line(b.x+24,524,b.x+b.w-24,524,'#d9c89c33');text('GATHER  →  CRAFT  →  LEVEL',250,550,9,'#d0bc83',700,'center','DM Mono');text('AIR · MIND · WATER · EARTH · FIRE',250,575,8,'#a4b8aa',500,'center','DM Mono');rr(250-54,93,108,27,9,'#142228bb','#d8c99a44');text(`BEST ${best} m`,250,107,9,'#f0dfb9',700,'center','DM Mono')}
-function drawPortraitHUD(){const b=portraitBox();rr(b.x,14,b.w,101,15,'#142228e8','#d7c69b42');text('RUNESPRINT',b.x+16,33,12,'#f4ead5',800);text(`DIST ${Math.floor(dist)} m`,b.x+16,57,11,'#dfc99a',700,'left','DM Mono');text(`BEST ${best} m`,b.x+16,82,9,'#a7b3a5',500,'left','DM Mono');line(250,45,250,101,'#d4c39736');text(`LEVEL ${level}`,b.x+b.w-16,40,11,'#f3e7d0',800,'right');let p=(xp-xpForLevel(level))/Math.max(1,xpForLevel(level+1)-xpForLevel(level));rr(250,57,b.w*.34,5,3,'#33433f');rr(250,57,b.w*.34*clamp(p,0,1),5,3,'#d5b66e');text(`${essence} ESSENCE`,b.x+b.w-16,80,10,'#c9e6e1',700,'right','DM Mono');text(`${runesMade} RUNES`,b.x+b.w-16,99,8,'#c8b78f',500,'right','DM Mono');rr(b.x+b.w-35,123,35,27,9,'#142228bb','#e0d0a244');text('Ⅱ',b.x+b.w-17,136,13,'#e7d8b8',700,'center');if(craftTextTime>0){rr(b.x+8,160,b.w-16,35,10,'#253d3bdd','#bdd7cb55');text(craftText,250,178,Math.min(10,b.w/25),'#f4e1a8',700,'center')};if(dist<190&&elapsed>1){rr(b.x+6,ground+36,b.w-12,38,10,'#142228b8','#d7c69b24');text('Collect  ·  Craft  ·  Level up',250,ground+55,10,'#e6ddc9',600,'center')}}
-function drawPortraitPause(){const b=portraitBox();ctx.fillStyle='#0914199c';ctx.fillRect(b.x-8,0,b.w+16,H);rr(b.x+5,245,b.w-10,230,20,'#142228f2','#ddc99566',1.5);text('PAUSED',250,290,11,'#d2ba7e',700,'center','DM Mono');text('Catch your breath,',250,342,18,'#f1e7d2',800,'center');text('the altar can wait.',250,372,13,'#bac6b8',500,'center');rr(250-b.w*.32,407,b.w*.64,43,11,'#bd9354');text('RESUME RUN',250,429,11,'#172126',800,'center');text('TAP TO CONTINUE',250,462,8,'#aab8a9',500,'center','DM Mono')}
-function drawPortraitOver(){const b=portraitBox();ctx.fillStyle='#091419aa';ctx.fillRect(b.x-8,0,b.w+16,H);rr(b.x+5,172,b.w-10,396,20,'#142228f2','#ddc99566',1.5);circle(250,217,23,'#493f36');text('✦',250,218,20,'#d2a96a',600,'center');text('The run ends here.',250,267,20,'#f1e7d2',800,'center');text('Every essence leaves a little magic.',250,295,9,'#b7c3b4',500,'center');line(b.x+28,319,b.x+b.w-28,319,'#d9c89c33');text('DISTANCE',190,347,8,'#a8b5a5',500,'center','DM Mono');text(`${Math.floor(dist)} m`,190,373,18,'#f1e5ce',800,'center');text('RUNES',308,347,8,'#a8b5a5',500,'center','DM Mono');text(`${runesMade}`,308,373,18,'#e1c47d',800,'center');rr(250-b.w*.34,411,b.w*.68,52,12,'#bd9354');text('RUN AGAIN',250,437,12,'#172126',800,'center');text(`LEVEL ${level}  ·  ${xp} XP`,250,489,9,'#c7c7ae',600,'center','DM Mono');text('TAP BELOW TO RETURN TO TITLE',250,536,8,'#94a79d',500,'center','DM Mono')}
-function drawPause(){ctx.fillStyle='#0914199c';ctx.fillRect(0,0,W,H);rr(390,218,420,254,24,'#142228f2','#ddc99566',1.5);text('PAUSED',600,281,13,'#d2ba7e',700,'center','DM Mono');text('Catch your breath,',600,333,29,'#f1e7d2',800,'center');text('the altar can wait.',600,370,19,'#bac6b8',500,'center');rr(500,409,200,45,12,'#bd9354');text('RESUME RUN',600,432,12,'#172126',800,'center');text('P / ESC / TAP TO CONTINUE',600,479,9,'#aab8a9',500,'center','DM Mono')}
-function drawOver(){ctx.fillStyle='#091419aa';ctx.fillRect(0,0,W,H);rr(350,140,500,425,24,'#142228f2','#ddc99566',1.5);circle(600,202,32,'#493f36');text('✦',600,203,26,'#d2a96a',600,'center');text('The run ends here.',600,260,31,'#f1e7d2',800,'center');text('But every essence leaves a little magic behind.',600,296,13,'#b7c3b4',500,'center');line(430,330,770,330,'#d9c89c33');text('DISTANCE',485,362,9,'#a8b5a5',500,'center','DM Mono');text(`${Math.floor(dist)} m`,485,390,24,'#f1e5ce',800,'center');text('RUNES CRAFTED',715,362,9,'#a8b5a5',500,'center','DM Mono');text(`${runesMade}`,715,390,24,'#e1c47d',800,'center');rr(447,429,306,56,13,'#bd9354');text('RUN AGAIN',600,457,14,'#172126',800,'center');text(`LEVEL ${level}  ·  ${xp.toLocaleString()} RUNEC​​RAFTING XP`,600,511,10,'#c7c7ae',600,'center','DM Mono');text('TAP HERE TO RETURN TO TITLE',600,541,9,'#94a79d',500,'center','DM Mono')}
 </script>
 </body>
 </html>
